@@ -1,0 +1,446 @@
+/*     */ package com.example.bedfight.command;
+/*     */ 
+/*     */ import com.example.bedfight.BedFightPlugin;
+/*     */ import com.example.bedfight.arena.Arena;
+/*     */ import com.example.bedfight.arena.ArenaManager;
+/*     */ import com.example.bedfight.arena.Pos;
+/*     */ import com.example.bedfight.arena.TeamSpec;
+/*     */ import com.example.bedfight.arena.Teams;
+/*     */ import com.example.bedfight.game.Match;
+/*     */ import com.example.bedfight.game.Mode;
+/*     */ import java.io.File;
+/*     */ import java.util.ArrayList;
+/*     */ import java.util.HashSet;
+/*     */ import java.util.List;
+/*     */ import java.util.Locale;
+/*     */ import org.bukkit.Bukkit;
+/*     */ import org.bukkit.ChatColor;
+/*     */ import org.bukkit.DyeColor;
+/*     */ import org.bukkit.Location;
+/*     */ import org.bukkit.Material;
+/*     */ import org.bukkit.World;
+/*     */ import org.bukkit.block.Block;
+/*     */ import org.bukkit.command.Command;
+/*     */ import org.bukkit.command.CommandExecutor;
+/*     */ import org.bukkit.command.CommandSender;
+/*     */ import org.bukkit.command.TabCompleter;
+/*     */ import org.bukkit.entity.Player;
+/*     */ 
+/*     */ public final class BedFightCommand
+/*     */   implements CommandExecutor, TabCompleter
+/*     */ {
+/*     */   private static final String ADMIN = "bedfight.admin";
+/*  33 */   private static final List<String> ADMIN_SUBS = List.of("setuparena", "po1", "po2", "setspawn", "createteam", "setteam", "setbed", "buildmode", "save", "reload");
+/*     */   
+/*     */   private final BedFightPlugin plugin;
+/*     */ 
+/*     */   
+/*     */   public BedFightCommand(BedFightPlugin plugin) {
+/*  39 */     this.plugin = plugin;
+/*     */   }
+/*     */   public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+/*     */     Player p;
+/*     */     String err;
+/*  44 */     if (sender instanceof Player) { p = (Player)sender; }
+/*  45 */     else { sender.sendMessage("Players only.");
+/*  46 */       return true; }
+/*     */     
+/*  48 */     ArenaManager arenas = this.plugin.getArenaManager();
+/*     */ 
+/*     */     
+/*  51 */     if (cmd.getName().equalsIgnoreCase("leave")) {
+/*  52 */       return leave(p);
+/*     */     }
+/*  54 */     if (cmd.getName().equalsIgnoreCase("adminkiteditor")) {
+/*  55 */       return kitEditor(p, args);
+/*     */     }
+/*  57 */     if (cmd.getName().equalsIgnoreCase("beddefend")) {
+/*  58 */       return bedDefend(p, args);
+/*     */     }
+/*     */ 
+/*     */     
+/*  62 */     if (args.length == 0) {
+/*  63 */       return queue(p, Mode.parse(this.plugin.getConfig().getString("default-mode", "1v1")));
+/*     */     }
+/*  65 */     String sub = args[0].toLowerCase(Locale.ROOT);
+/*     */     
+/*  67 */     Mode asMode = Mode.parse(sub);
+/*  68 */     if (asMode != null) {
+/*  69 */       return queue(p, asMode);
+/*     */     }
+/*  71 */     if (sub.equals("leave")) {
+/*  72 */       return leave(p);
+/*     */     }
+/*  74 */     if (sub.equals("private")) {
+/*  75 */       if (!p.hasPermission("bedfight.rank.mvpplusplus")) {
+/*  76 */         this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Only MVP++ players can create private matches.");
+/*  77 */         return true;
+/*     */       } 
+/*  79 */       if (this.plugin.getGameManager().isBusy(p)) {
+/*  80 */         this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "You are already in a queue or match.");
+/*  81 */         return true;
+/*     */       } 
+/*  83 */       this.plugin.getPrivateGui().open(p);
+/*  84 */       return true;
+/*     */     } 
+/*     */ 
+/*     */     
+/*  88 */     if (!ADMIN_SUBS.contains(sub)) {
+/*  89 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Unknown sub-command. Usage: /bedfight [1v1|2v2|3v3|private|leave]");
+/*  90 */       return true;
+/*     */     } 
+/*  92 */     if (!p.hasPermission("bedfight.admin")) {
+/*  93 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "You don't have permission to do that.");
+/*  94 */       return true;
+/*     */     } 
+/*     */     
+/*  97 */     if (sub.equals("setuparena")) {
+/*  98 */       if (args.length < 2) {
+/*  99 */         this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Usage: /bedfight setuparena <world_name>");
+/* 100 */         return true;
+/*     */       } 
+/* 102 */       String str = arenas.setupArena(p, args[1]);
+/* 103 */       if (str != null) {
+/* 104 */         this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + String.valueOf(ChatColor.RED));
+/*     */       } else {
+/* 106 */         this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.GREEN) + "World '" + String.valueOf(ChatColor.GREEN) + "' loaded. You are now setting up arena '" + args[1] + "'. Next: /bedfight po1, po2, setspawn, createteam, setteam, setbed, save.");
+/*     */       } 
+/*     */       
+/* 109 */       return true;
+/*     */     } 
+/*     */     
+/* 112 */     if (sub.equals("buildmode")) {
+/* 113 */       if (arenas.toggleBuildMode(p)) {
+/* 114 */         p.sendMessage("you currently buildmode");
+/*     */       } else {
+/* 116 */         this.plugin.msg((CommandSender)p, "Build mode disabled. The map is protected again.");
+/*     */       } 
+/* 118 */       return true;
+/*     */     } 
+/*     */     
+/* 121 */     if (sub.equals("reload")) {
+/* 122 */       this.plugin.reloadConfig();
+/* 123 */       arenas.loadAll();
+/* 124 */       this.plugin.getKitManager().load();
+/* 125 */       this.plugin.getScoreboards().reload();
+/* 126 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.GREEN) + "Reloaded config.yml, scoreboard.yml, kit.yml and arenas.");
+/* 127 */       return true;
+/*     */     } 
+/*     */     
+/* 130 */     Arena arena = arenas.session(p);
+/* 131 */     if (arena == null) {
+/* 132 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Start with /bedfight setuparena <world_name> first.");
+/* 133 */       return true;
+/*     */     } 
+/*     */     
+/* 136 */     switch (sub) {
+/*     */       case "po1":
+/*     */       case "po2":
+/* 139 */         setBound(p, arena, sub.equals("po1"));
+/*     */         break;
+/*     */       case "setspawn":
+/* 142 */         arena.setSpawn(Pos.of(p.getLocation()));
+/* 143 */         this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.GREEN) + "Game spawn set.");
+/*     */         break;
+/*     */       case "createteam":
+/* 146 */         createTeam(p, arena, args);
+/*     */         break;
+/*     */       case "setteam":
+/* 149 */         setTeamSpawn(p, arena, args);
+/*     */         break;
+/*     */       case "setbed":
+/* 152 */         setBed(p, arena, args);
+/*     */         break;
+/*     */       case "save":
+/* 155 */         err = arenas.save(p);
+/* 156 */         this.plugin.msg((CommandSender)p, (err == null) ? (
+/* 157 */             String.valueOf(ChatColor.GREEN) + "Arena '" + String.valueOf(ChatColor.GREEN) + "' saved to arenas/" + arena.getName() + ".yml") : (
+/* 158 */             String.valueOf(ChatColor.RED) + String.valueOf(ChatColor.RED)));
+/*     */         break;
+/*     */     } 
+/*     */ 
+/*     */ 
+/*     */     
+/* 164 */     return true;
+/*     */   }
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */   
+/*     */   private boolean leave(Player p) {
+/* 171 */     if (this.plugin.getGameManager().leaveQueue(p)) {
+/* 172 */       this.plugin.msg((CommandSender)p, "You left the queue.");
+/* 173 */       return true;
+/*     */     } 
+/* 175 */     Match m = this.plugin.getGameManager().getMatch(p);
+/* 176 */     if (m != null) {
+/* 177 */       m.onLeave(p);
+/* 178 */       this.plugin.msg((CommandSender)p, "You left the BedFight match.");
+/* 179 */       return true;
+/*     */     } 
+/* 181 */     this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "You are not in a BedFight queue or match.");
+/* 182 */     return true;
+/*     */   }
+/*     */   
+/*     */   private boolean queue(Player p, Mode mode) {
+/* 186 */     if (!p.hasPermission("bedfight.play")) {
+/* 187 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "You don't have permission to play BedFight.");
+/* 188 */       return true;
+/*     */     } 
+/* 190 */     this.plugin.getGameManager().joinQueue(p, (mode == null) ? Mode.SOLO : mode);
+/* 191 */     return true;
+/*     */   }
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */   
+/*     */   private boolean kitEditor(Player p, String[] args) {
+/* 198 */     if (!p.hasPermission("bedfight.admin")) {
+/* 199 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "You don't have permission to do that.");
+/* 200 */       return true;
+/*     */     } 
+/* 202 */     if (args.length > 0 && args[0].equalsIgnoreCase("reset")) {
+/* 203 */       this.plugin.getKitManager().resetToDefault();
+/* 204 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.GREEN) + "Kit reset to the default (iron sword, 64 wool, shears, golden apple, leather armor).");
+/* 205 */       return true;
+/*     */     } 
+/* 207 */     this.plugin.getKitEditor().open(p);
+/* 208 */     return true;
+/*     */   }
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */   
+/*     */   private boolean bedDefend(Player p, String[] args) {
+/* 216 */     if (!p.hasPermission("bedfight.admin")) {
+/* 217 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "You don't have permission to do that.");
+/* 218 */       return true;
+/*     */     } 
+/* 220 */     Arena arena = this.plugin.getArenaManager().session(p);
+/* 221 */     if (arena == null) {
+/* 222 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Start with /bedfight setuparena <world_name> first.");
+/* 223 */       return true;
+/*     */     } 
+/* 225 */     String op = (args.length == 0) ? "" : args[0].toLowerCase(Locale.ROOT);
+/* 226 */     if (!op.equals("po1") && !op.equals("po2") && !op.equals("clear")) {
+/* 227 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Usage: /beddefend <po1|po2|clear> [color]");
+/* 228 */       return true;
+/*     */     } 
+/* 230 */     DyeColor c = resolveTeam(p, arena, args);
+/* 231 */     if (c == null) {
+/* 232 */       return true;
+/*     */     }
+/* 234 */     TeamSpec t = arena.team(c, true);
+/* 235 */     if (op.equals("clear")) {
+/* 236 */       t.setDefense1(null);
+/* 237 */       t.setDefense2(null);
+/* 238 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.GREEN) + "Bed defense region of team " + String.valueOf(ChatColor.GREEN) + Teams.display(c) + " cleared.");
+/* 239 */       return true;
+/*     */     } 
+/* 241 */     Pos pos = Pos.ofBlock(p.getLocation().getBlock());
+/* 242 */     if (op.equals("po1")) {
+/* 243 */       t.setDefense1(pos);
+/*     */     } else {
+/* 245 */       t.setDefense2(pos);
+/*     */     } 
+/*     */     
+/* 248 */     String msg = String.valueOf(ChatColor.GREEN) + "Bed defense " + String.valueOf(ChatColor.GREEN) + " of team " + op + Teams.display(c) + " set to " + String.valueOf(ChatColor.GREEN) + ", " + pos.blockX() + ", " + pos.blockY() + ".";
+/* 249 */     if (t.hasDefense()) {
+/* 250 */       int dx = Math.abs(t.getDefense1().blockX() - t.getDefense2().blockX()) + 1;
+/* 251 */       int dy = Math.abs(t.getDefense1().blockY() - t.getDefense2().blockY()) + 1;
+/* 252 */       int dz = Math.abs(t.getDefense1().blockZ() - t.getDefense2().blockZ()) + 1;
+/* 253 */       msg = msg + msg + " Region " + String.valueOf(ChatColor.GRAY) + "x" + dx + "x" + dy + ": blocks inside can be broken during matches. Don't forget /bedfight save.";
+/*     */     } else {
+/*     */       
+/* 256 */       msg = msg + msg + " Now set the opposite corner with /beddefend " + String.valueOf(ChatColor.GRAY) + ".";
+/*     */     } 
+/* 258 */     this.plugin.msg((CommandSender)p, msg);
+/* 259 */     return true;
+/*     */   }
+/*     */   
+/*     */   private void setBound(Player p, Arena arena, boolean first) {
+/* 263 */     Pos pos = Pos.ofBlock(p.getLocation().getBlock());
+/* 264 */     if (first) {
+/* 265 */       arena.setPos1(pos);
+/*     */     } else {
+/* 267 */       arena.setPos2(pos);
+/*     */     } 
+/*     */     
+/* 270 */     String msg = String.valueOf(ChatColor.GREEN) + String.valueOf(ChatColor.GREEN) + " set to " + (first ? "po1" : "po2") + ", " + pos.blockX() + ", " + pos.blockY() + ".";
+/* 271 */     if (arena.hasBounds())
+/*     */     {
+/* 273 */       msg = msg + msg + " Void level (min Y) = " + String.valueOf(ChatColor.GRAY) + String.valueOf(ChatColor.WHITE) + arena.getMinY() + ", max build height (max Y) = " + String.valueOf(ChatColor.GRAY) + String.valueOf(ChatColor.WHITE) + ".";
+/*     */     }
+/* 275 */     this.plugin.msg((CommandSender)p, msg);
+/* 276 */     if (arena.hasBounds() && arena.getMaxY() - arena.getMinY() < 8) {
+/* 277 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.YELLOW) + "Warning: only " + String.valueOf(ChatColor.YELLOW) + " blocks between void level and build limit. Players can't build above Y " + arena.getMaxY() - arena.getMinY() + " - set one point at the lowest void level and one high above the islands.");
+/*     */     }
+/*     */   }
+/*     */ 
+/*     */ 
+/*     */   
+/*     */   private void createTeam(Player p, Arena arena, String[] args) {
+/* 284 */     if (args.length < 2) {
+/* 285 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Usage: /bedfight createteam <color>");
+/*     */       return;
+/*     */     } 
+/* 288 */     DyeColor c = Teams.parse(args[1]);
+/* 289 */     if (c == null) {
+/* 290 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Unknown color. Valid: " + String.valueOf(ChatColor.RED));
+/*     */       return;
+/*     */     } 
+/* 293 */     boolean existed = arena.getTeams().containsKey(c);
+/* 294 */     arena.team(c, true);
+/* 295 */     this.plugin.getArenaManager().select(p, c);
+/* 296 */     this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.GREEN) + "Team " + String.valueOf(ChatColor.GREEN) + Teams.display(c) + String.valueOf(ChatColor.GREEN) + " Now use /bedfight setteam and /bedfight setbed.");
+/*     */   }
+/*     */ 
+/*     */ 
+/*     */   
+/*     */   private void setTeamSpawn(Player p, Arena arena, String[] args) {
+/* 302 */     DyeColor c = resolveTeam(p, arena, args);
+/* 303 */     if (c == null) {
+/*     */       return;
+/*     */     }
+/* 306 */     Location loc = p.getLocation();
+/* 307 */     Block under = loc.getBlock().getRelative(0, -1, 0);
+/* 308 */     if (under.getType() == Material.AIR) {
+/* 309 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Stand on a solid block - the block under your feet is the spawn.");
+/*     */       
+/*     */       return;
+/*     */     } 
+/* 313 */     arena.team(c, true).setSpawn(new Pos(under.getX() + 0.5D, (under.getY() + 1), under.getZ() + 0.5D, loc
+/* 314 */           .getYaw(), 0.0F));
+/* 315 */     this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.GREEN) + "Spawn of team " + String.valueOf(ChatColor.GREEN) + Teams.display(c) + " set to block " + String.valueOf(ChatColor.GREEN) + ", " + under
+/* 316 */         .getX() + ", " + under.getY() + ".");
+/*     */   }
+/*     */   
+/*     */   private void setBed(Player p, Arena arena, String[] args) {
+/* 320 */     DyeColor c = resolveTeam(p, arena, args);
+/* 321 */     if (c == null) {
+/*     */       return;
+/*     */     }
+/* 324 */     Block bed = p.getTargetBlock((HashSet)null, 6);
+/* 325 */     if (bed == null || bed.getType() != Material.BED_BLOCK) {
+/* 326 */       Block feet = p.getLocation().getBlock();
+/* 327 */       bed = (feet.getType() == Material.BED_BLOCK) ? feet : null;
+/*     */     } 
+/* 329 */     if (bed == null) {
+/* 330 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "Look at the team's bed (within 6 blocks) and run the command again.");
+/*     */       return;
+/*     */     } 
+/* 333 */     arena.team(c, true).setBed(Pos.ofBlock(bed));
+/* 334 */     this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.GREEN) + "Bed of team " + String.valueOf(ChatColor.GREEN) + Teams.display(c) + " registered at " + String.valueOf(ChatColor.GREEN) + ", " + bed
+/* 335 */         .getX() + ", " + bed.getY() + ".");
+/*     */   }
+/*     */ 
+/*     */   
+/*     */   private DyeColor resolveTeam(Player p, Arena arena, String[] args) {
+/* 340 */     if (args.length >= 2) {
+/* 341 */       DyeColor dyeColor = Teams.parse(args[1]);
+/* 342 */       if (dyeColor == null || !arena.getTeams().containsKey(dyeColor)) {
+/* 343 */         this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "That team doesn't exist. Use /bedfight createteam <color> first.");
+/* 344 */         return null;
+/*     */       } 
+/* 346 */       this.plugin.getArenaManager().select(p, dyeColor);
+/* 347 */       return dyeColor;
+/*     */     } 
+/* 349 */     DyeColor c = this.plugin.getArenaManager().selected(p);
+/* 350 */     if (c == null || !arena.getTeams().containsKey(c)) {
+/* 351 */       this.plugin.msg((CommandSender)p, String.valueOf(ChatColor.RED) + "No team selected. Use /bedfight createteam <color> or pass the color.");
+/* 352 */       return null;
+/*     */     } 
+/* 354 */     return c;
+/*     */   }
+/*     */   
+/*     */   private static String colorList() {
+/* 358 */     List<String> l = new ArrayList<>();
+/* 359 */     for (DyeColor c : DyeColor.values()) {
+/* 360 */       l.add(c.name().toLowerCase(Locale.ROOT));
+/*     */     }
+/* 362 */     return String.join(", ", (Iterable)l);
+/*     */   }
+/*     */ 
+/*     */ 
+/*     */   
+/*     */   public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
+/*     */     Player p;
+/* 369 */     List<String> out = new ArrayList<>();
+/* 370 */     if (sender instanceof Player) { p = (Player)sender; }
+/* 371 */     else { return out; }
+/*     */     
+/* 373 */     String cn = cmd.getName().toLowerCase(Locale.ROOT);
+/* 374 */     if (cn.equals("leave")) {
+/* 375 */       return out;
+/*     */     }
+/* 377 */     if (cn.equals("adminkiteditor")) {
+/* 378 */       if (args.length == 1) {
+/* 379 */         out.add("reset");
+/*     */       }
+/* 381 */       return filter(out, args);
+/*     */     } 
+/* 383 */     if (cn.equals("beddefend")) {
+/* 384 */       if (args.length == 1) {
+/* 385 */         out.addAll(List.of("po1", "po2", "clear"));
+/* 386 */       } else if (args.length == 2) {
+/* 387 */         Arena a = this.plugin.getArenaManager().session(p);
+/* 388 */         if (a != null) {
+/* 389 */           for (DyeColor c : a.getTeams().keySet()) {
+/* 390 */             out.add(c.name().toLowerCase(Locale.ROOT));
+/*     */           }
+/*     */         }
+/*     */       } 
+/* 394 */       return filter(out, args);
+/*     */     } 
+/* 396 */     if (args.length == 1) {
+/* 397 */       out.addAll(List.of("1v1", "2v2", "3v3", "leave"));
+/* 398 */       if (p.hasPermission("bedfight.rank.mvpplusplus")) {
+/* 399 */         out.add("private");
+/*     */       }
+/* 401 */       if (p.hasPermission("bedfight.admin")) {
+/* 402 */         out.addAll(ADMIN_SUBS);
+/*     */       }
+/* 404 */     } else if (args.length == 2 && p.hasPermission("bedfight.admin")) {
+/* 405 */       String sub = args[0].toLowerCase(Locale.ROOT);
+/* 406 */       if (sub.equals("createteam")) {
+/* 407 */         for (DyeColor c : DyeColor.values()) {
+/* 408 */           out.add(c.name().toLowerCase(Locale.ROOT));
+/*     */         }
+/* 410 */       } else if (sub.equals("setteam") || sub.equals("setbed")) {
+/* 411 */         Arena a = this.plugin.getArenaManager().session(p);
+/* 412 */         if (a != null) {
+/* 413 */           for (DyeColor c : a.getTeams().keySet()) {
+/* 414 */             out.add(c.name().toLowerCase(Locale.ROOT));
+/*     */           }
+/*     */         }
+/* 417 */       } else if (sub.equals("setuparena")) {
+/* 418 */         HashSet<String> names = new HashSet<>();
+/* 419 */         for (World w : Bukkit.getWorlds()) {
+/* 420 */           names.add(w.getName());
+/*     */         }
+/* 422 */         File[] dirs = Bukkit.getWorldContainer().listFiles(f -> 
+/* 423 */             (f.isDirectory() && (new File(f, "level.dat")).isFile()));
+/* 424 */         if (dirs != null) {
+/* 425 */           for (File f : dirs) {
+/* 426 */             names.add(f.getName());
+/*     */           }
+/*     */         }
+/* 429 */         out.addAll(names);
+/*     */       } 
+/*     */     } 
+/* 432 */     return filter(out, args);
+/*     */   }
+/*     */   
+/*     */   private static List<String> filter(List<String> out, String[] args) {
+/* 436 */     String prefix = (args.length == 0) ? "" : args[args.length - 1].toLowerCase(Locale.ROOT);
+/* 437 */     out.removeIf(s -> !s.toLowerCase(Locale.ROOT).startsWith(prefix));
+/* 438 */     return out;
+/*     */   }
+/*     */ }
+
+
+/* Location:              C:\Users\nasle javan\Desktop\BedFight-1.0.0.jar!\com\example\bedfight\command\BedFightCommand.class
+ * Java compiler version: 17 (61.0)
+ * JD-Core Version:       1.1.3
+ */

@@ -1,0 +1,134 @@
+/*     */ package com.example.bedfight.listener;
+/*     */ 
+/*     */ import com.example.bedfight.BedFightPlugin;
+/*     */ import com.example.bedfight.arena.ArenaManager;
+/*     */ import com.example.bedfight.game.Match;
+/*     */ import org.bukkit.World;
+/*     */ import org.bukkit.command.CommandSender;
+/*     */ import org.bukkit.event.EventHandler;
+/*     */ import org.bukkit.event.EventPriority;
+/*     */ import org.bukkit.event.Listener;
+/*     */ import org.bukkit.event.block.BlockBreakEvent;
+/*     */ import org.bukkit.event.block.BlockPlaceEvent;
+/*     */ import org.bukkit.event.entity.EntityDamageEvent;
+/*     */ import org.bukkit.event.entity.EntityExplodeEvent;
+/*     */ import org.bukkit.event.entity.FoodLevelChangeEvent;
+/*     */ import org.bukkit.event.entity.ItemSpawnEvent;
+/*     */ import org.bukkit.event.player.PlayerDropItemEvent;
+/*     */ import org.bukkit.event.player.PlayerMoveEvent;
+/*     */ import org.bukkit.event.player.PlayerPickupItemEvent;
+/*     */ import org.bukkit.event.player.PlayerQuitEvent;
+/*     */ 
+/*     */ 
+/*     */ public final class ArenaListener
+/*     */   implements Listener
+/*     */ {
+/*     */   private static final String PROTECTED_MSG = "This arena is protected. Use /bedfight buildmode to edit it.";
+/*     */   private final BedFightPlugin plugin;
+/*     */   
+/*     */   public ArenaListener(BedFightPlugin plugin) {
+/*  30 */     this.plugin = plugin;
+/*     */   }
+/*     */   private Match match(World w) {
+/*  33 */     return this.plugin.getGameManager().getMatchByWorld(w);
+/*     */   }
+/*     */   @EventHandler(priority = EventPriority.HIGHEST)
+/*     */   public void onBreak(BlockBreakEvent e) {
+/*  37 */     Match m = match(e.getBlock().getWorld());
+/*  38 */     if (m != null) {
+/*  39 */       m.onBreak(e);
+/*     */       return;
+/*     */     } 
+/*  42 */     ArenaManager am = this.plugin.getArenaManager();
+/*  43 */     if (am.isTemplateWorld(e.getBlock().getWorld()) && !am.isBuildMode(e.getPlayer())) {
+/*  44 */       e.setCancelled(true);
+/*  45 */       this.plugin.msg((CommandSender)e.getPlayer(), "This arena is protected. Use /bedfight buildmode to edit it.");
+/*     */     } 
+/*     */   }
+/*     */   
+/*     */   @EventHandler(priority = EventPriority.HIGHEST)
+/*     */   public void onPlace(BlockPlaceEvent e) {
+/*  51 */     Match m = match(e.getBlock().getWorld());
+/*  52 */     if (m != null) {
+/*  53 */       m.onPlace(e);
+/*     */       return;
+/*     */     } 
+/*  56 */     ArenaManager am = this.plugin.getArenaManager();
+/*  57 */     if (am.isTemplateWorld(e.getBlock().getWorld()) && !am.isBuildMode(e.getPlayer())) {
+/*  58 */       e.setCancelled(true);
+/*  59 */       this.plugin.msg((CommandSender)e.getPlayer(), "This arena is protected. Use /bedfight buildmode to edit it.");
+/*     */     } 
+/*     */   }
+/*     */   
+/*     */   @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+/*     */   public void onExplode(EntityExplodeEvent e) {
+/*  65 */     World w = e.getEntity().getWorld();
+/*  66 */     Match m = match(w);
+/*  67 */     if (m != null) {
+/*  68 */       m.onExplode(e);
+/*  69 */     } else if (this.plugin.getArenaManager().isTemplateWorld(w)) {
+/*  70 */       e.blockList().clear();
+/*     */     } 
+/*     */   }
+/*     */   
+/*     */   @EventHandler(priority = EventPriority.HIGHEST)
+/*     */   public void onDamage(EntityDamageEvent e) {
+/*  76 */     Match m = match(e.getEntity().getWorld());
+/*  77 */     if (m != null) {
+/*  78 */       m.onDamage(e);
+/*     */     }
+/*     */   }
+/*     */   
+/*     */   @EventHandler(ignoreCancelled = true)
+/*     */   public void onMove(PlayerMoveEvent e) {
+/*  84 */     Match m = match(e.getPlayer().getWorld());
+/*  85 */     if (m != null) {
+/*  86 */       m.onMove(e);
+/*     */     }
+/*     */   }
+/*     */ 
+/*     */   
+/*     */   @EventHandler(priority = EventPriority.HIGHEST)
+/*     */   public void onDrop(PlayerDropItemEvent e) {
+/*  93 */     if (match(e.getPlayer().getWorld()) != null) {
+/*  94 */       e.setCancelled(true);
+/*     */     }
+/*     */   }
+/*     */   
+/*     */   @EventHandler(priority = EventPriority.HIGHEST)
+/*     */   public void onPickup(PlayerPickupItemEvent e) {
+/* 100 */     if (match(e.getPlayer().getWorld()) != null) {
+/* 101 */       e.setCancelled(true);
+/*     */     }
+/*     */   }
+/*     */ 
+/*     */   
+/*     */   @EventHandler(priority = EventPriority.HIGHEST)
+/*     */   public void onItemSpawn(ItemSpawnEvent e) {
+/* 108 */     if (match(e.getLocation().getWorld()) != null) {
+/* 109 */       e.setCancelled(true);
+/*     */     }
+/*     */   }
+/*     */   
+/*     */   @EventHandler
+/*     */   public void onFood(FoodLevelChangeEvent e) {
+/* 115 */     if (match(e.getEntity().getWorld()) != null) {
+/* 116 */       e.setCancelled(true);
+/*     */     }
+/*     */   }
+/*     */   
+/*     */   @EventHandler
+/*     */   public void onQuit(PlayerQuitEvent e) {
+/* 122 */     this.plugin.getGameManager().leaveQueue(e.getPlayer());
+/* 123 */     this.plugin.getArenaManager().onQuit(e.getPlayer());
+/* 124 */     Match m = this.plugin.getGameManager().getMatch(e.getPlayer());
+/* 125 */     if (m != null)
+/* 126 */       m.onQuit(e.getPlayer()); 
+/*     */   }
+/*     */ }
+
+
+/* Location:              C:\Users\nasle javan\Desktop\BedFight-1.0.0.jar!\com\example\bedfight\listener\ArenaListener.class
+ * Java compiler version: 17 (61.0)
+ * JD-Core Version:       1.1.3
+ */

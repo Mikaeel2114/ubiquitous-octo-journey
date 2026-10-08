@@ -1,0 +1,234 @@
+/*     */ package com.example.bedfight.game;
+/*     */ 
+/*     */ import com.example.bedfight.util.Titles;
+/*     */ import java.util.UUID;
+/*     */ import org.bukkit.Bukkit;
+/*     */ import org.bukkit.ChatColor;
+/*     */ import org.bukkit.Sound;
+/*     */ import org.bukkit.entity.Player;
+/*     */ import org.bukkit.scheduler.BukkitRunnable;
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */ class null
+/*     */   extends BukkitRunnable
+/*     */ {
+/* 204 */   int left = seconds;
+/*     */ 
+/*     */   
+/*     */   public void run() {
+/* 208 */     if (Match.this.state != Match.State.COUNTDOWN) {
+/* 209 */       cancel();
+/*     */       return;
+/*     */     } 
+/* 212 */     if (this.left <= 0) {
+/* 213 */       cancel();
+/* 214 */       Match.this.startGame();
+/*     */       return;
+/*     */     } 
+/* 217 */     Match.this.countdownLeft = this.left;
+/* 218 */     ChatColor c = (this.left > 3) ? ChatColor.GREEN : ((this.left == 3) ? ChatColor.YELLOW : ChatColor.RED);
+/* 219 */     for (UUID id : Match.this.byPlayer.keySet()) {
+/* 220 */       Player p = Bukkit.getPlayer(id);
+/* 221 */       if (p != null) {
+/* 222 */         Titles.send(p, String.valueOf(c) + String.valueOf(c) + String.valueOf(ChatColor.BOLD), String.valueOf(ChatColor.GRAY) + "Get ready to fight!", 0, 25, 5);
+/* 223 */         p.playSound(p.getLocation(), Sound.NOTE_STICKS, 1.0F, 1.0F);
+/*     */       } 
+/*     */     } 
+/* 226 */     this.left--;
+/*     */   }
+/*     */ }
+
+
+/* Location:              C:\Users\nasle javan\Desktop\BedFight-1.0.0.jar!\com\example\bedfight\game\Match$1.class
+ * Java compiler version: 17 (61.0)
+ * JD-Core Version:       1.1.3
+ */

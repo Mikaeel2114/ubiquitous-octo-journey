@@ -1,0 +1,206 @@
+/*     */ package com.example.bedfight.game;
+/*     */ 
+/*     */ import com.example.bedfight.BedFightPlugin;
+/*     */ import com.example.bedfight.arena.Arena;
+/*     */ import java.util.ArrayList;
+/*     */ import java.util.EnumMap;
+/*     */ import java.util.HashMap;
+/*     */ import java.util.HashSet;
+/*     */ import java.util.Iterator;
+/*     */ import java.util.LinkedHashSet;
+/*     */ import java.util.List;
+/*     */ import java.util.Map;
+/*     */ import java.util.Random;
+/*     */ import java.util.Set;
+/*     */ import java.util.UUID;
+/*     */ import org.bukkit.Bukkit;
+/*     */ import org.bukkit.World;
+/*     */ import org.bukkit.command.CommandSender;
+/*     */ import org.bukkit.entity.Player;
+/*     */ 
+/*     */ public final class GameManager
+/*     */ {
+/*     */   private final BedFightPlugin plugin;
+/*  24 */   private final Random random = new Random();
+/*  25 */   private final Map<Mode, LinkedHashSet<UUID>> queues = new EnumMap<>(Mode.class);
+/*  26 */   private final Map<UUID, Mode> queued = new HashMap<>();
+/*  27 */   private final Map<UUID, Long> queuedAt = new HashMap<>();
+/*  28 */   private final Set<Match> matches = new LinkedHashSet<>();
+/*  29 */   private final Map<UUID, Match> byPlayer = new HashMap<>();
+/*  30 */   private final Map<String, Match> byWorld = new HashMap<>();
+/*     */   
+/*     */   public GameManager(BedFightPlugin plugin) {
+/*  33 */     this.plugin = plugin;
+/*  34 */     for (Mode m : Mode.values()) {
+/*  35 */       this.queues.put(m, new LinkedHashSet<>());
+/*     */     }
+/*     */   }
+/*     */ 
+/*     */   
+/*     */   public Match getMatch(Player p) {
+/*  41 */     return this.byPlayer.get(p.getUniqueId());
+/*     */   } public Match getMatchByWorld(World w) {
+/*  43 */     return this.byWorld.get(w.getName());
+/*     */   } public Mode getQueuedMode(Player p) {
+/*  45 */     return this.queued.get(p.getUniqueId());
+/*     */   } public int getQueueSize(Mode m) {
+/*  47 */     return ((LinkedHashSet)this.queues.get(m)).size();
+/*     */   }
+/*     */   public long getQueuedSince(Player p) {
+/*  50 */     Long t = this.queuedAt.get(p.getUniqueId());
+/*  51 */     return (t == null) ? System.currentTimeMillis() : t.longValue();
+/*     */   }
+/*     */ 
+/*     */   
+/*     */   public Set<UUID> activePlayers() {
+/*  56 */     Set<UUID> s = new HashSet<>(this.byPlayer.keySet());
+/*  57 */     s.addAll(this.queued.keySet());
+/*  58 */     return s;
+/*     */   }
+/*     */   
+/*     */   public boolean isBusy(Player p) {
+/*  62 */     return (this.byPlayer.containsKey(p.getUniqueId()) || this.queued.containsKey(p.getUniqueId()));
+/*     */   }
+/*     */ 
+/*     */ 
+/*     */   
+/*     */   public void joinQueue(Player p, Mode mode) {
+/*  68 */     List<Player> group = this.plugin.getPartyHook().getPartyMembers(p);
+/*  69 */     if (group.size() > 1 && !this.plugin.getPartyHook().isLeader(p)) {
+/*  70 */       this.plugin.msg((CommandSender)p, "Only your party leader can queue the party.");
+/*     */       return;
+/*     */     } 
+/*  73 */     if (group.size() > mode.totalPlayers()) {
+/*  74 */       this.plugin.msg((CommandSender)p, "Your party is too large for " + mode.label() + ".");
+/*     */       return;
+/*     */     } 
+/*  77 */     for (Player member : group) {
+/*  78 */       if (isBusy(member)) {
+/*  79 */         this.plugin.msg((CommandSender)p, member.getName() + " is already in a queue or match.");
+/*     */         return;
+/*     */       } 
+/*     */     } 
+/*  83 */     if (this.plugin.getArenaManager().all().isEmpty()) {
+/*  84 */       this.plugin.msg((CommandSender)p, "No arenas are available right now.");
+/*     */       return;
+/*     */     } 
+/*  87 */     LinkedHashSet<UUID> q = this.queues.get(mode);
+/*  88 */     for (Player member : group) {
+/*  89 */       q.add(member.getUniqueId());
+/*  90 */       this.queued.put(member.getUniqueId(), mode);
+/*  91 */       this.queuedAt.put(member.getUniqueId(), Long.valueOf(System.currentTimeMillis()));
+/*  92 */       this.plugin.msg((CommandSender)member, "Joined the " + mode.label() + " queue (" + q.size() + "/" + mode
+/*  93 */           .totalPlayers() + "). Use /bedfight leave to leave.");
+/*     */     } 
+/*  95 */     matchmake(mode);
+/*     */   }
+/*     */   
+/*     */   public boolean leaveQueue(Player p) {
+/*  99 */     Mode m = this.queued.remove(p.getUniqueId());
+/* 100 */     this.queuedAt.remove(p.getUniqueId());
+/* 101 */     if (m == null) {
+/* 102 */       return false;
+/*     */     }
+/* 104 */     ((LinkedHashSet)this.queues.get(m)).remove(p.getUniqueId());
+/* 105 */     return true;
+/*     */   }
+/*     */   
+/*     */   private void matchmake(Mode mode) {
+/* 109 */     LinkedHashSet<UUID> q = this.queues.get(mode);
+/* 110 */     while (q.size() >= mode.totalPlayers()) {
+/* 111 */       List<Arena> arenas = new ArrayList<>(this.plugin.getArenaManager().all());
+/* 112 */       if (arenas.isEmpty()) {
+/*     */         return;
+/*     */       }
+/* 115 */       List<Player> players = new ArrayList<>();
+/* 116 */       Iterator<UUID> it = q.iterator();
+/* 117 */       while (it.hasNext() && players.size() < mode.totalPlayers()) {
+/* 118 */         UUID id = it.next();
+/* 119 */         it.remove();
+/* 120 */         this.queued.remove(id);
+/* 121 */         this.queuedAt.remove(id);
+/* 122 */         Player pl = Bukkit.getPlayer(id);
+/* 123 */         if (pl != null && pl.isOnline()) {
+/* 124 */           players.add(pl);
+/*     */         }
+/*     */       } 
+/* 127 */       if (players.size() < mode.totalPlayers()) {
+/*     */         
+/* 129 */         for (Player pl : players) {
+/* 130 */           q.add(pl.getUniqueId());
+/* 131 */           this.queued.put(pl.getUniqueId(), mode);
+/* 132 */           this.queuedAt.put(pl.getUniqueId(), Long.valueOf(System.currentTimeMillis()));
+/*     */         } 
+/*     */         continue;
+/*     */       } 
+/* 136 */       startMatch(arenas.get(this.random.nextInt(arenas.size())), mode, players);
+/*     */     } 
+/*     */   }
+/*     */ 
+/*     */ 
+/*     */ 
+/*     */   
+/*     */   public String startPrivateMatch(Player host, Arena arena, Mode mode) {
+/* 144 */     if (!this.plugin.getPartyHook().isAvailable()) {
+/* 145 */       return "The party system (minestormparty) is not available.";
+/*     */     }
+/* 147 */     if (!this.plugin.getPartyHook().isLeader(host)) {
+/* 148 */       return "Only the party leader can start a private match.";
+/*     */     }
+/* 150 */     List<Player> members = this.plugin.getPartyHook().getPartyMembers(host);
+/* 151 */     if (members.size() != mode.totalPlayers()) {
+/* 152 */       return "A " + mode.label() + " needs exactly " + mode.totalPlayers() + " players in your party (you have " + members
+/* 153 */         .size() + ").";
+/*     */     }
+/* 155 */     for (Player m : members) {
+/* 156 */       if (isBusy(m)) {
+/* 157 */         return m.getName() + " is already in a queue or match.";
+/*     */       }
+/*     */     } 
+/* 160 */     startMatch(arena, mode, members);
+/* 161 */     return null;
+/*     */   }
+/*     */   
+/*     */   public Match startMatch(Arena arena, Mode mode, List<Player> players) {
+/* 165 */     for (Player p : players) {
+/* 166 */       leaveQueue(p);
+/*     */     }
+/* 168 */     List<List<Player>> teams = this.plugin.getPartyHook().splitIntoTeams(players, mode.teamSize(), 2);
+/* 169 */     Match match = new Match(this.plugin, this, arena, mode, teams);
+/* 170 */     register(match);
+/* 171 */     match.prepare();
+/* 172 */     return match;
+/*     */   }
+/*     */   
+/*     */   private void register(Match m) {
+/* 176 */     this.matches.add(m);
+/* 177 */     this.byWorld.put(m.getWorldName(), m);
+/* 178 */     for (UUID id : m.getPlayerIds()) {
+/* 179 */       this.byPlayer.put(id, m);
+/*     */     }
+/*     */   }
+/*     */ 
+/*     */   
+/*     */   void detach(Player p) {
+/* 185 */     this.byPlayer.remove(p.getUniqueId());
+/*     */   }
+/*     */   
+/*     */   void unregister(Match m) {
+/* 189 */     this.matches.remove(m);
+/* 190 */     this.byWorld.remove(m.getWorldName());
+/* 191 */     for (UUID id : m.getPlayerIds()) {
+/* 192 */       this.byPlayer.remove(id, m);
+/*     */     }
+/*     */   }
+/*     */   
+/*     */   public void shutdown() {
+/* 197 */     for (Match m : new ArrayList(this.matches))
+/* 198 */       m.forceEnd(); 
+/*     */   }
+/*     */ }
+
+
+/* Location:              C:\Users\nasle javan\Desktop\BedFight-1.0.0.jar!\com\example\bedfight\game\GameManager.class
+ * Java compiler version: 17 (61.0)
+ * JD-Core Version:       1.1.3
+ */

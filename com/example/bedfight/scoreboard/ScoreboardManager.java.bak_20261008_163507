@@ -1,0 +1,173 @@
+/*     */ package com.example.bedfight.scoreboard;
+/*     */ 
+/*     */ import com.example.bedfight.BedFightPlugin;
+/*     */ import com.example.bedfight.arena.Teams;
+/*     */ import com.example.bedfight.game.GameManager;
+/*     */ import com.example.bedfight.game.Match;
+/*     */ import com.example.bedfight.game.Mode;
+/*     */ import com.example.bedfight.util.Ping;
+/*     */ import com.example.bedfight.util.YamlFiles;
+/*     */ import java.io.File;
+/*     */ import java.util.ArrayList;
+/*     */ import java.util.HashMap;
+/*     */ import java.util.List;
+/*     */ import java.util.Locale;
+/*     */ import java.util.Map;
+/*     */ import java.util.Set;
+/*     */ import java.util.UUID;
+/*     */ import org.bukkit.Bukkit;
+/*     */ import org.bukkit.ChatColor;
+/*     */ import org.bukkit.configuration.file.YamlConfiguration;
+/*     */ import org.bukkit.entity.Player;
+/*     */ import org.bukkit.plugin.Plugin;
+/*     */ import org.bukkit.scheduler.BukkitTask;
+/*     */ 
+/*     */ 
+/*     */ public final class ScoreboardManager
+/*     */ {
+/*     */   private final BedFightPlugin plugin;
+/*     */   private final File file;
+/*     */   private YamlConfiguration cfg;
+/*  31 */   private final Map<UUID, PlayerBoard> boards = new HashMap<>();
+/*     */   private BukkitTask task;
+/*     */   
+/*     */   public ScoreboardManager(BedFightPlugin plugin) {
+/*  35 */     this.plugin = plugin;
+/*  36 */     this.file = new File(plugin.getDataFolder(), "scoreboard.yml");
+/*  37 */     if (!this.file.isFile()) {
+/*  38 */       plugin.saveResource("scoreboard.yml", false);
+/*     */     }
+/*  40 */     reload();
+/*     */   }
+/*     */   
+/*     */   public void reload() {
+/*  44 */     stop();
+/*  45 */     this.cfg = YamlFiles.load(this.file);
+/*  46 */     if (this.cfg.getBoolean("enabled", true)) {
+/*  47 */       long period = Math.max(2L, this.cfg.getLong("update-ticks", 20L));
+/*  48 */       this.task = Bukkit.getScheduler().runTaskTimer((Plugin)this.plugin, this::tick, 20L, period);
+/*     */     } 
+/*     */   }
+/*     */ 
+/*     */   
+/*     */   public void stop() {
+/*  54 */     if (this.task != null) {
+/*  55 */       this.task.cancel();
+/*  56 */       this.task = null;
+/*     */     } 
+/*  58 */     for (UUID id : new ArrayList(this.boards.keySet())) {
+/*  59 */       Player p = Bukkit.getPlayer(id);
+/*  60 */       if (p != null) {
+/*  61 */         p.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+/*     */       }
+/*     */     } 
+/*  64 */     this.boards.clear();
+/*     */   }
+/*     */   
+/*     */   private void tick() {
+/*  68 */     GameManager games = this.plugin.getGameManager();
+/*  69 */     Set<UUID> active = games.activePlayers();
+/*  70 */     for (UUID id : active) {
+/*  71 */       String title; List<String> lines; Player p = Bukkit.getPlayer(id);
+/*  72 */       if (p == null) {
+/*     */         continue;
+/*     */       }
+/*  75 */       Match m = games.getMatch(p);
+/*     */ 
+/*     */       
+/*  78 */       if (m != null) {
+/*  79 */         title = this.cfg.getString("match.title", "&b&lBedFight");
+/*  80 */         lines = matchLines(p, m);
+/*  81 */       } else if (games.getQueuedMode(p) != null) {
+/*  82 */         title = this.cfg.getString("queue.title", "&b&lBedFight");
+/*  83 */         lines = queueLines(p, games);
+/*     */       } else {
+/*     */         continue;
+/*     */       } 
+/*  87 */       PlayerBoard board = this.boards.computeIfAbsent(id, k -> new PlayerBoard(p));
+/*  88 */       board.render(p, color(title), lines);
+/*     */     } 
+/*  90 */     for (UUID id : new ArrayList(this.boards.keySet())) {
+/*  91 */       if (!active.contains(id)) {
+/*  92 */         Player p = Bukkit.getPlayer(id);
+/*  93 */         if (p != null) {
+/*  94 */           p.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+/*     */         }
+/*  96 */         this.boards.remove(id);
+/*     */       } 
+/*     */     } 
+/*     */   }
+/*     */ 
+/*     */ 
+/*     */   
+/*     */   private List<String> matchLines(Player p, Match m) {
+/* 104 */     Map<String, String> ph = m.placeholders(p);
+/* 105 */     ph.put("%ip%", this.cfg.getString("ip", "minemen.club"));
+/* 106 */     List<String> out = new ArrayList<>();
+/* 107 */     for (String raw : this.cfg.getStringList("match.lines")) {
+/* 108 */       if (raw.contains("%teams%")) {
+/* 109 */         for (Match.TeamView tv : m.teamViews(p))
+/* 110 */           out.add(color(teamLine(tv))); 
+/*     */         continue;
+/*     */       } 
+/* 113 */       out.add(color(replace(raw, ph)));
+/*     */     } 
+/*     */     
+/* 116 */     return out;
+/*     */   }
+/*     */   
+/*     */   private String teamLine(Match.TeamView tv) {
+/* 120 */     String status, name = tv.color().name().toLowerCase(Locale.ROOT).replace('_', ' ');
+/* 121 */     name = "" + Character.toUpperCase(name.charAt(0)) + Character.toUpperCase(name.charAt(0));
+/*     */     
+/* 123 */     if (tv.bedAlive()) {
+/* 124 */       status = this.cfg.getString("match.bed-alive", "&a✔");
+/* 125 */     } else if (tv.alive() > 0) {
+/* 126 */       status = this.cfg.getString("match.bed-dead", "&a%alive%").replace("%alive%", String.valueOf(tv.alive()));
+/*     */     } else {
+/* 128 */       status = this.cfg.getString("match.eliminated", "&c✘");
+/*     */     } 
+/* 130 */     Map<String, String> ph = new HashMap<>();
+/* 131 */     ph.put("%color%", Teams.chat(tv.color()).toString());
+/* 132 */     ph.put("%letter%", name.substring(0, 1));
+/* 133 */     ph.put("%name%", name);
+/* 134 */     ph.put("%team_status%", status);
+/* 135 */     ph.put("%you%", tv.mine() ? this.cfg.getString("match.you", " &7YOU") : "");
+/* 136 */     return replace(this.cfg.getString("match.team-line", "%color%%letter% &f%name%&7: %team_status%%you%"), ph);
+/*     */   }
+/*     */   
+/*     */   private List<String> queueLines(Player p, GameManager games) {
+/* 140 */     Mode mode = games.getQueuedMode(p);
+/* 141 */     long secs = Math.max(0L, (System.currentTimeMillis() - games.getQueuedSince(p)) / 1000L);
+/* 142 */     Map<String, String> ph = new HashMap<>();
+/* 143 */     ph.put("%player%", p.getName());
+/* 144 */     ph.put("%mode%", mode.label());
+/* 145 */     ph.put("%queued%", String.valueOf(games.getQueueSize(mode)));
+/* 146 */     ph.put("%needed%", String.valueOf(mode.totalPlayers()));
+/* 147 */     ph.put("%queue_time%", String.format("%d:%02d", new Object[] { Long.valueOf(secs / 60L), Long.valueOf(secs % 60L) }));
+/* 148 */     ph.put("%ping%", String.valueOf(Ping.get(p)));
+/* 149 */     ph.put("%ip%", this.cfg.getString("ip", "minemen.club"));
+/* 150 */     List<String> out = new ArrayList<>();
+/* 151 */     for (String raw : this.cfg.getStringList("queue.lines")) {
+/* 152 */       out.add(color(replace(raw, ph)));
+/*     */     }
+/* 154 */     return out;
+/*     */   }
+/*     */   
+/*     */   private static String replace(String s, Map<String, String> ph) {
+/* 158 */     for (Map.Entry<String, String> e : ph.entrySet()) {
+/* 159 */       s = s.replace(e.getKey(), e.getValue());
+/*     */     }
+/* 161 */     return s;
+/*     */   }
+/*     */   
+/*     */   private static String color(String s) {
+/* 165 */     return ChatColor.translateAlternateColorCodes('&', s);
+/*     */   }
+/*     */ }
+
+
+/* Location:              C:\Users\nasle javan\Desktop\BedFight-1.0.0.jar!\com\example\bedfight\scoreboard\ScoreboardManager.class
+ * Java compiler version: 17 (61.0)
+ * JD-Core Version:       1.1.3
+ */
